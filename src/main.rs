@@ -1,3 +1,11 @@
+#![warn(
+    clippy::all,
+    clippy::pedantic,
+    clippy::print_stdout,
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::integer_division
+)]
 #![allow(clippy::needless_return)]
 #![allow(unused)]
 
@@ -9,7 +17,11 @@ mod editor;
 
 use editor::Editor;
 
+pub type IoErr = std::io::Error;
+pub type UnitResult<T> = Result<(), T>;
+pub type TerminalResult = io::Result<()>;
+
 fn main() {
-    let editor = Editor::new();
+    let mut editor = Editor::new();
     editor.run();
 }
