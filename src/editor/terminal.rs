@@ -1,17 +1,14 @@
-use crate::{IoErr, TerminalResult};
-use std::{
-    fmt::Display,
-    io::{self, Write, stdout},
-};
+use crate::TerminalResult;
+use std::io::{self, Write, stdout};
 
 use crossterm::{
     Command,
     cursor::{Hide, MoveTo, Show},
-    execute, queue,
-    style::{Attribute::SlowBlink, Print},
+    queue,
+    style::Print,
     terminal::{
         Clear,
-        ClearType::{self, CurrentLine},
+        ClearType::{self},
         disable_raw_mode, enable_raw_mode,
     },
 };
@@ -42,7 +39,7 @@ impl Terminal {
     }
 
     pub fn clear_screen() -> TerminalResult {
-        queue_command(Clear(ClearType::All))
+        return queue_command(Clear(ClearType::All));
     }
 
     pub fn clear_line() -> TerminalResult {
@@ -70,10 +67,10 @@ impl Terminal {
     pub fn size() -> io::Result<Size> {
         #![allow(clippy::as_conversions)]
         let (width, height) = crossterm::terminal::size()?;
-        Ok(Size {
+        return Ok(Size {
             height: height as usize,
             width: width as usize,
-        })
+        });
     }
 
     pub fn show_cursor() -> TerminalResult {
@@ -85,7 +82,7 @@ impl Terminal {
     }
 
     /// preforms an unflushed print on the current stdout session.
-    pub fn print<T: Display>(string: T) -> TerminalResult {
+    pub fn print(string: &str) -> TerminalResult {
         return queue_command(Print(string));
     }
 }

@@ -4,16 +4,14 @@
     clippy::print_stdout,
     clippy::arithmetic_side_effects,
     clippy::as_conversions,
-    clippy::integer_division
+    clippy::integer_division,
+    clippy::implicit_return
 )]
 #![allow(clippy::needless_return)]
-#![allow(unused)]
-
-use crossterm::terminal::disable_raw_mode;
-use crossterm::terminal::enable_raw_mode;
-use std::io::{self, Read};
 
 mod editor;
+
+use std::io;
 
 use editor::Editor;
 

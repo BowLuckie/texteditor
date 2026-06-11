@@ -1,46 +1,36 @@
-use std::{
-    default,
-    io::{self, Read, Write, stdout},
-    sync::Arc,
-};
-
-use crossterm::{
-    cursor::{Hide, MoveTo, Show},
-    event::{
-        self,
-        Event::{self, Key},
-        KeyCode::{self, Char, End, Home, PageDown, PageUp},
-        KeyEvent,
-        KeyEventKind::Press,
-        KeyModifiers,
-    },
-    execute,
-    terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode},
+use crossterm::event::{
+    self,
+    Event::{self, Key},
+    KeyCode::{self, Char, End, Home, PageDown, PageUp},
+    KeyEvent,
+    KeyEventKind::Press,
+    KeyModifiers,
 };
 use event::KeyCode::{Down, Left, Right, Up};
 
 use crate::{
-    IoErr, TerminalResult,
+    TerminalResult,
     editor::terminal::{Position, Size},
 };
 
 mod terminal;
 use terminal::Terminal as Term;
 
+mod view;
+use view::View;
+
 /// represents a complete editor.
 #[derive(Default)]
 pub struct Editor {
     should_quit: bool,
     cursor_location: Position,
+    view: View,
 }
-
-const VER: &str = env!("CARGO_PKG_VERSION");
-const NAME: &str = env!("CARGO_PKG_NAME");
 
 impl Editor {
     /// Creates a new [`Editor`].
     pub fn new() -> Self {
-        Self::default()
+        return Self::default();
     }
 
     /// Runs this [`Editor`] by rendering it in the terminal.
@@ -60,7 +50,7 @@ impl Editor {
             let event = event::read()?;
             self.evaluate_event(&event)?;
         }
-        Ok(())
+        return Ok(());
     }
 
     fn evaluate_event(&mut self, event: &Event) -> TerminalResult {
@@ -74,10 +64,7 @@ impl Editor {
         }
 
         if let Key(KeyEvent {
-            code,
-            modifiers,
-            kind: Press,
-            ..
+            code, kind: Press, ..
         }) = event
             && let Up | Down | Left | Right | PageUp | PageDown | Home | End = *code
         {
@@ -89,51 +76,16 @@ impl Editor {
 
     fn refresh_screen(&self) -> TerminalResult {
         Term::hide_cursor()?;
+        Term::move_cursor(Position::default())?;
         if self.should_quit {
             Term::clear_screen()?;
             Term::print("Goodbye.\r\n")?;
         } else {
-            Self::draw_rows()?;
+            self.view.render()?;
             Term::move_cursor(self.cursor_location)?;
         }
         Term::show_cursor()?;
         Term::flush()?;
-        Ok(())
-    }
-
-    fn draw_welcome_message() -> TerminalResult {
-        #![allow(clippy::integer_division)]
-        let mut welcome_message = format!("{NAME} editor -- version {VER}");
-        let width = Term::size()?.width;
-        let len = welcome_message.len();
-        let padding = (width.saturating_sub(len)) / 2;
-        let spaces = " ".repeat(padding.saturating_sub(1));
-        welcome_message = format!("~{spaces}{welcome_message}");
-        welcome_message.truncate(width);
-        Term::print(welcome_message)?;
-        Ok(())
-    }
-
-    fn draw_empty_row() -> TerminalResult {
-        Term::print("~")?;
-        Ok(())
-    }
-
-    fn draw_rows() -> TerminalResult {
-        #![allow(clippy::integer_division)]
-        Term::move_cursor(Position { x: 0, y: 0 });
-        let Size { height, .. } = Term::size()?;
-        for current_row in 0..height {
-            Term::clear_line()?;
-            if current_row == height / 3 {
-                Self::draw_welcome_message()?;
-            } else {
-                Self::draw_empty_row()?;
-            }
-            if current_row.saturating_add(1) < height {
-                Term::print("\r\n")?;
-            }
-        }
         return Ok(());
     }
 
