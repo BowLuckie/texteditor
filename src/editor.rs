@@ -9,7 +9,7 @@ use crossterm::{
     event::{
         self,
         Event::{self, Key},
-        KeyCode::{self, Char},
+        KeyCode::{self, Char, End, Home, PageDown, PageUp},
         KeyEvent,
         KeyEventKind::Press,
         KeyModifiers,
@@ -58,12 +58,12 @@ impl Editor {
                 break;
             }
             let event = event::read()?;
-            self.evaluate_event(&event);
+            self.evaluate_event(&event)?;
         }
         Ok(())
     }
 
-    fn evaluate_event(&mut self, event: &Event) {
+    fn evaluate_event(&mut self, event: &Event) -> TerminalResult {
         if let Key(KeyEvent {
             code, modifiers, ..
         }) = event
@@ -79,10 +79,12 @@ impl Editor {
             kind: Press,
             ..
         }) = event
-            && let Up | Down | Left | Right = *code
+            && let Up | Down | Left | Right | PageUp | PageDown | Home | End = *code
         {
-            self.directional_move(*code);
+            self.directional_move(*code)?;
         }
+
+        return Ok(());
     }
 
     fn refresh_screen(&self) -> TerminalResult {
@@ -136,24 +138,28 @@ impl Editor {
     }
 
     fn move_cursor_location(&mut self, position: Position) {
-        // TODO:
         self.cursor_location = position;
     }
 
     fn directional_move(&mut self, direction: KeyCode) -> TerminalResult {
-        let (x, y) = (self.cursor_location.x, self.cursor_location.y);
-        let Size {
-            width: size_x,
-            height: size_y,
-        } = Term::size()?;
-        match direction {
-            Up if y != 0 => self.move_cursor_location(Position { x, y: y - 1 }),
-            Down if size_y - 1 != y => self.move_cursor_location(Position { x, y: y + 1 }),
-            Left if x != 0 => self.move_cursor_location(Position { x: x - 1, y }),
-            Right if x != size_x - 1 => self.move_cursor_location(Position { x: x + 1, y }),
-            _ => return Ok(()),
-        }
+        #![allow(clippy::arithmetic_side_effects)]
+        let Position { x, y } = self.cursor_location;
+        let Size { height, width } = Term::size()?;
+        let (max_x, max_y) = (width.saturating_sub(1), height.saturating_sub(1));
 
+        let new_pos = match direction {
+            Up if y > 0 => Position { x, y: y - 1 },
+            Down if y < max_y => Position { x, y: y + 1 },
+            Left if x > 0 => Position { x: x - 1, y },
+            Right if x < max_x => Position { x: x + 1, y },
+            PageUp => Position { x, y: 0 },
+            PageDown => Position { x, y: max_y },
+            Home => Position { x: 0, y },
+            End => Position { x: max_x, y },
+            _ => return Ok(()),
+        };
+
+        self.move_cursor_location(new_pos);
         return Ok(());
     }
 }
