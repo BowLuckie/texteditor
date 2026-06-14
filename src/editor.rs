@@ -1,117 +1,131 @@
-use crossterm::event::{
-    self,
-    Event::{self, Key},
-    KeyCode::{self, Char, End, Home, PageDown, PageUp},
-    KeyEvent,
-    KeyEventKind::Press,
-    KeyModifiers,
+use crossterm::event::{Event, KeyEvent, KeyEventKind, read};
+use std::{
+    env,
+    io::Error,
+    panic::{set_hook, take_hook},
 };
-use event::KeyCode::{Down, Left, Right, Up};
-
-use crate::{
-    TerminalResult,
-    editor::terminal::{Position, Size},
-};
-
+mod editorcommand;
 mod terminal;
-use terminal::Terminal as Term;
-
 mod view;
+use terminal::Terminal;
 use view::View;
 
-/// represents a complete editor.
-#[derive(Default)]
+use editorcommand::EditorCommand;
+
 pub struct Editor {
     should_quit: bool,
-    cursor_location: Position,
     view: View,
 }
 
 impl Editor {
-    /// Creates a new [`Editor`].
-    pub fn new() -> Self {
-        return Self::default();
+    pub fn new() -> Result<Self, Error> {
+        let current_hook = take_hook();
+        set_hook(Box::new(move |panic_info| {
+            let _ = Terminal::terminate();
+            current_hook(panic_info);
+        }));
+        Terminal::initialize()?;
+        let mut view = View::default();
+        let args: Vec<String> = env::args().collect();
+        if let Some(file_name) = args.get(1) {
+            view.load(file_name);
+        }
+        return Ok(Self {
+            should_quit: false,
+            view,
+        });
     }
 
-    /// Runs this [`Editor`] by rendering it in the terminal.
     pub fn run(&mut self) {
-        Term::initialize().unwrap();
-        let result = self.repl();
-        Term::terminate().unwrap();
-        result.unwrap();
-    }
-
-    fn repl(&mut self) -> TerminalResult {
         loop {
-            self.refresh_screen()?;
+            self.refresh_screen();
             if self.should_quit {
                 break;
             }
-            let event = event::read()?;
-            self.evaluate_event(&event)?;
+            match read() {
+                Ok(event) => self.evaluate_event(event),
+                Err(err) => {
+                    #[cfg(debug_assertions)]
+                    {
+                        panic!("Could not read event: {err:?}");
+                    }
+                }
+            }
         }
-        return Ok(());
     }
 
-    fn evaluate_event(&mut self, event: &Event) -> TerminalResult {
-        if let Key(KeyEvent {
-            code, modifiers, ..
-        }) = event
-            && let Char('q') = code
-            && modifiers == &KeyModifiers::CONTROL
-        {
-            self.should_quit = true;
-        }
-
-        if let Key(KeyEvent {
-            code, kind: Press, ..
-        }) = event
-            && let Up | Down | Left | Right | PageUp | PageDown | Home | End = *code
-        {
-            self.directional_move(*code)?;
-        }
-
-        return Ok(());
-    }
-
-    fn refresh_screen(&self) -> TerminalResult {
-        Term::hide_cursor()?;
-        Term::move_cursor(Position::default())?;
-        if self.should_quit {
-            Term::clear_screen()?;
-            Term::print("Goodbye.\r\n")?;
-        } else {
-            self.view.render()?;
-            Term::move_cursor(self.cursor_location)?;
-        }
-        Term::show_cursor()?;
-        Term::flush()?;
-        return Ok(());
-    }
-
-    fn move_cursor_location(&mut self, position: Position) {
-        self.cursor_location = position;
-    }
-
-    fn directional_move(&mut self, direction: KeyCode) -> TerminalResult {
-        #![allow(clippy::arithmetic_side_effects)]
-        let Position { x, y } = self.cursor_location;
-        let Size { height, width } = Term::size()?;
-        let (max_x, max_y) = (width.saturating_sub(1), height.saturating_sub(1));
-
-        let new_pos = match direction {
-            Up if y > 0 => Position { x, y: y - 1 },
-            Down if y < max_y => Position { x, y: y + 1 },
-            Left if x > 0 => Position { x: x - 1, y },
-            Right if x < max_x => Position { x: x + 1, y },
-            PageUp => Position { x, y: 0 },
-            PageDown => Position { x, y: max_y },
-            Home => Position { x: 0, y },
-            End => Position { x: max_x, y },
-            _ => return Ok(()),
+    // needless_pass_by_value: Event is not huge, so there is not a
+    // performance overhead in passing by value, and pattern matching in this
+    // function would be needlessly complicated if we pass by reference here.
+    #[allow(clippy::needless_pass_by_value)]
+    fn evaluate_event(&mut self, event: Event) {
+        let should_process = match &event {
+            Event::Key(KeyEvent { kind, .. }) => {
+                if *kind == KeyEventKind::Release {
+                    return;
+                }
+                true
+            }
+            Event::Resize(_, _) => true,
+            _ => false,
         };
 
-        self.move_cursor_location(new_pos);
-        return Ok(());
+        if should_process {
+            match EditorCommand::try_from(event) {
+                Ok(command) => {
+                    if matches!(command, EditorCommand::Quit) {
+                        self.should_quit = true;
+                    } else {
+                        self.view.handle_command(command);
+                    }
+                }
+                Err(err) => {
+                    #[cfg(debug_assertions)]
+                    {
+                        panic!("Could not handle command: {err}");
+                    }
+                }
+            }
+        } else {
+            #[cfg(debug_assertions)]
+            {
+                panic!("Received and discarded unsupported or non-press event. {event:?}");
+            }
+        }
+    }
+
+    fn refresh_screen(&mut self) {
+        let _ = Terminal::hide_caret();
+        self.view.render();
+        let _ = Terminal::move_caret_to(self.view.get_position());
+        let _ = Terminal::show_caret();
+        let _ = Terminal::flush();
+    }
+}
+
+impl Drop for Editor {
+    fn drop(&mut self) {
+        let _ = Terminal::terminate();
+        if self.should_quit {
+            let _ = Terminal::print("\r\nthank you for using the\r\n");
+            let _ = Terminal::print(
+                r"
+    ___                             ___                                    ___                       
+  ,--.'|_                         ,--.'|_                  ,---,  ,--,   ,--.'|_                     
+  |  | :,'                        |  | :,'               ,---.'|,--.'|   |  | :,'   ,---.    __  ,-. 
+  :  : ' :            ,--,  ,--,  :  : ' :               |   | :|  |,    :  : ' :  '   ,'\ ,' ,'/ /| 
+.;__,'  /     ,---.   |'. \/ .`|.;__,'  /     ,---.      |   | |`--'_  .;__,'  /  /   /   |'  | |' | 
+|  |   |     /     \  '  \/  / ;|  |   |     /     \   ,--.__| |,' ,'| |  |   |  .   ; ,. :|  |   ,' 
+:__,'| :    /    /  |  \  \.' / :__,'| :    /    /  | /   ,'   |'  | | :__,'| :  '   | |: :'  :  /   
+  '  : |__ .    ' / |   \  ;  ;   '  : |__ .    ' / |.   '  /  ||  | :   '  : |__'   | .; :|  | '    
+  |  | '.'|'   ;   /|  / \  \  \  |  | '.'|'   ;   /|'   ; |:  |'  : |__ |  | '.'|   :    |;  : |    
+  ;  :    ;'   |  / |./__;   ;  \ ;  :    ;'   |  / ||   | '/  '|  | '.'|;  :    ;\   \  / |  , ;    
+  |  ,   / |   :    ||   :/\  \ ; |  ,   / |   :    ||   :    :|;  :    ;|  ,   /  `----'   ---'     
+   ---`-'   \   \  / `---'  `--`   ---`-'   \   \  /  \   \  /  |  ,   /  ---`-'                     
+             `----'                          `----'    `----'    ---`-'                              
+
+",
+            );
+        }
     }
 }
