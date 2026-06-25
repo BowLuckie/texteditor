@@ -8,10 +8,10 @@
     clippy::implicit_return
 )]
 #![allow(clippy::needless_return)]
+#![deny(clippy::todo)]
 
 mod editor;
 use editor::Editor;
-
 
 fn main() {
     let mut editor = Editor::new().unwrap();

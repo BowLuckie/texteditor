@@ -43,7 +43,7 @@ impl Editor {
                 break;
             }
             match read() {
-                Ok(event) => self.evaluate_event(event),
+                Ok(event) => self.evaluate_event(&event),
                 Err(err) => {
                     #[cfg(debug_assertions)]
                     {
@@ -54,12 +54,8 @@ impl Editor {
         }
     }
 
-    // needless_pass_by_value: Event is not huge, so there is not a
-    // performance overhead in passing by value, and pattern matching in this
-    // function would be needlessly complicated if we pass by reference here.
-    #[allow(clippy::needless_pass_by_value)]
-    fn evaluate_event(&mut self, event: Event) {
-        let should_process = match &event {
+    fn evaluate_event(&mut self, event: &Event) {
+        let should_process = match event {
             Event::Key(KeyEvent { kind, .. }) => {
                 if *kind == KeyEventKind::Release {
                     return;
@@ -97,7 +93,7 @@ impl Editor {
     fn refresh_screen(&mut self) {
         let _ = Terminal::hide_caret();
         self.view.render();
-        let _ = Terminal::move_caret_to(self.view.get_position());
+        let _ = Terminal::move_caret_to(self.view.caret_pos());
         let _ = Terminal::show_caret();
         let _ = Terminal::flush();
     }
