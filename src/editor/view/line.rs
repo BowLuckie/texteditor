@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{char, ops::Range};
 
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
@@ -39,10 +39,15 @@ impl Line {
                     0 | 1 => GraphemeWidth::Half,
                     _ => GraphemeWidth::Full,
                 };
-                let replacement = match width {
+
+                let mut replacement = match width {
                     0 => Some('.'),
                     _ => None,
                 };
+
+                if g == "\t" {
+                    replacement = Some('t');
+                }
 
                 return TextFragment {
                     grapheme: g.into(),
@@ -64,17 +69,25 @@ impl Line {
         let mut current_pos = 0;
         for f in &self.fragments {
             let fragment_end = f.rendered_width.saturating_add(current_pos);
+            eprintln!(
+                "grapheme: {:?}, replacement: {:?}, current_pos: {}, fragment_end: {}, range: {:?}",
+                f.grapheme, f.replacement, current_pos, fragment_end, range
+            );
+
             if current_pos >= range.end {
                 break;
             }
 
             if fragment_end > range.start {
-                if fragment_end > range.end || current_pos < range.start {
-                    result.push('⋯');
-                } else if let Some(char) = f.replacement {
-                    result.push(char);
-                } else {
-                    result.push_str(&f.grapheme);
+                match (
+                    fragment_end > range.end || current_pos < range.start,
+                    f.replacement,
+                ) {
+                    (true, _) => result.push('⋯'),
+                    (false, Some(c)) => result.push(c),
+                    (false, None) => {
+                        result.push_str(&f.grapheme);
+                    }
                 }
             }
             current_pos = fragment_end;

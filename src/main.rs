@@ -11,9 +11,12 @@
 #![deny(clippy::todo)]
 
 mod editor;
+use core::panic;
+
 use editor::Editor;
 
 fn main() {
+    panic!("");
     let mut editor = Editor::new().unwrap();
     editor.run();
 }

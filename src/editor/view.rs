@@ -39,7 +39,10 @@ impl View {
     pub fn handle_command(&mut self, command: EditorCommand) {
         match command {
             EditorCommand::Resize(size) => self.resize(size),
-            EditorCommand::Move(direction) => self.move_text_location(&direction),
+            EditorCommand::Move(direction) => {
+                self.move_text_location(&direction);
+                self.scroll();
+            }
             EditorCommand::Quit => {}
         }
     }
@@ -94,12 +97,12 @@ impl View {
     // scrolling
 
     pub fn scroll_vertically(&mut self, to: usize) {
-        let Size { width, .. } = self.size;
+        let Size { height, .. } = self.size;
         let offset_changed = if to < self.scroll_offset.row {
             self.scroll_offset.row = to;
             true
-        } else if to >= self.scroll_offset.row.saturating_add(width) {
-            self.scroll_offset.row = to.saturating_add(width).saturating_add(1);
+        } else if to >= self.scroll_offset.row.saturating_add(height) {
+            self.scroll_offset.row = to.saturating_sub(height).saturating_add(1);
             true
         } else {
             false
@@ -108,13 +111,12 @@ impl View {
     }
 
     pub fn scroll_horizontally(&mut self, to: usize) {
-        let Size { height, .. } = self.size;
-
+        let Size { width, .. } = self.size;
         let offset_changed = if to < self.scroll_offset.col {
             self.scroll_offset.col = to;
             true
-        } else if to >= self.scroll_offset.col.saturating_add(height) {
-            self.scroll_offset.col = to.saturating_add(height).saturating_add(1);
+        } else if to >= self.scroll_offset.col.saturating_add(width) {
+            self.scroll_offset.col = to.saturating_sub(width).saturating_add(1);
             true
         } else {
             false
@@ -251,16 +253,3 @@ impl Default for View {
         };
     }
 }
-
-// mkdir -p ~/.local/share/applications
-// cat > ~/.local/share/applications/myeditor.desktop << 'EOF'
-// [Desktop Entry]
-// Name=texteditor
-// Comment=custom text editor
-// Exec=~/dev/texteditor/target/debug/texteditor %F
-// Icon=text-editor
-// Terminal=true
-// Type=Application
-// Categories=Utility;TextEditor;
-// MimeType=text/plain;
-// EOF
