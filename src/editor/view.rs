@@ -45,7 +45,16 @@ impl View {
             }
             EditorCommand::Quit => {}
             EditorCommand::Insert(c) => self.insert_char(c),
+            EditorCommand::Del => self.delete(),
+            EditorCommand::Backspace => self.backspace(),
+            EditorCommand::Tab => self.insert_char('\t'),
+            EditorCommand::Enter => self.insert_newline(),
+            EditorCommand::Save => self.save(),
         }
+    }
+
+    fn save(&self) {
+        let _ = self.buffer.save();
     }
 
     pub fn load(&mut self, file_name: &str) {
@@ -67,7 +76,7 @@ impl View {
             .buffer
             .lines
             .get(line_idx)
-            .map_or(0, Line::grapheme_len);
+            .map_or(0, Line::grapheme_count);
 
         self.buffer.insert_char(c, self.caret_location);
 
@@ -75,12 +84,36 @@ impl View {
             .buffer
             .lines
             .get(line_idx)
-            .map_or(0, Line::grapheme_len);
+            .map_or(0, Line::grapheme_count);
 
         if new_len > old_len {
-            self.move_right();
+            self.move_text_location(&Direction::Right);
         }
 
+        self.needs_redraw = true;
+    }
+
+    fn delete(&mut self) {
+        self.buffer.delete(self.caret_location);
+        self.needs_redraw = true;
+    }
+
+    fn backspace(&mut self) {
+        if self
+            .caret_location
+            .line_idx
+            .saturating_add(self.caret_location.grapheme_idx)
+            == 0
+        {
+            return;
+        }
+        self.move_text_location(&Direction::Left);
+        self.delete();
+    }
+
+    fn insert_newline(&mut self) {
+        self.buffer.insert_newline(self.caret_location);
+        self.move_right();
         self.needs_redraw = true;
     }
 
@@ -211,7 +244,7 @@ impl View {
             .buffer
             .lines
             .get(self.caret_location.line_idx)
-            .map_or(0, Line::grapheme_len);
+            .map_or(0, Line::grapheme_count);
 
         if self.caret_location.grapheme_idx < line_width {
             self.caret_location.grapheme_idx += 1;
@@ -230,7 +263,7 @@ impl View {
             .buffer
             .lines
             .get(self.caret_location.line_idx)
-            .map_or(0, Line::grapheme_len);
+            .map_or(0, Line::grapheme_count);
     }
 
     fn snap_to_valid_grapheme(&mut self) {
@@ -239,7 +272,7 @@ impl View {
             .lines
             .get(self.caret_location.line_idx)
             .map_or(0, |line: &line::Line| {
-                return min(line.grapheme_len(), self.caret_location.grapheme_idx);
+                return min(line.grapheme_count(), self.caret_location.grapheme_idx);
             });
     }
 

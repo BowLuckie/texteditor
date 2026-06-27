@@ -1,8 +1,13 @@
-use std::{char, ops::Range};
+use std::{
+    char,
+    fmt::{self, Display},
+    ops::Range,
+};
 
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
+#[derive(Default)]
 pub struct Line {
     fragments: Vec<TextFragment>,
 }
@@ -106,23 +111,35 @@ impl Line {
     }
 
     pub fn insert_char(&mut self, ch: char, target_idx: usize) {
-        let mut res = String::new();
-
-        for (idx, frag) in self.fragments.iter().enumerate() {
-            if idx == target_idx {
-                res.push(ch);
-            }
-            res.push_str(&frag.grapheme);
-        }
-
-        if target_idx >= self.fragments.len() {
-            res.push(ch);
-        }
+        #![allow(clippy::implicit_return)] // implicit return do actually look better in closures
+        let res: String = self
+            .fragments
+            .iter()
+            .enumerate()
+            .flat_map(|(idx, frag)| {
+                let insert = (idx == target_idx).then_some(ch);
+                insert.into_iter().chain(frag.grapheme.chars())
+            })
+            .chain((target_idx >= self.fragments.len()).then_some(ch))
+            .collect();
 
         self.fragments = Self::text_to_fragment(&res);
     }
 
-    pub fn grapheme_len(&self) -> usize {
+    pub fn delete_char(&mut self, target_idx: usize) {
+        #![allow(clippy::implicit_return)] // implicit return do actually look better in closures
+        let result: String = self
+            .fragments
+            .iter()
+            .enumerate()
+            .filter(|(idx, _)| *idx != target_idx)
+            .map(|(_, f)| f.grapheme.as_str())
+            .collect();
+
+        self.fragments = Self::text_to_fragment(&result);
+    }
+
+    pub fn grapheme_count(&self) -> usize {
         return self.fragments.len();
     }
 
@@ -136,5 +153,30 @@ impl Line {
                 GraphemeWidth::Full => return 2,
             })
             .sum();
+    }
+
+    pub fn append_line(&mut self, next_line: &Line) {
+        #![allow(clippy::implicit_return)]
+        let mut result: String = self.to_string();
+        let next_string: String = next_line.to_string();
+        result.push_str(&next_string);
+        self.fragments = Self::text_to_fragment(&result);
+    }
+
+    pub fn split(&mut self, grapheme_idx: usize) -> Self {
+        if grapheme_idx > self.fragments.len() {
+            return Self::default();
+        }
+        let fragments = self.fragments.split_off(grapheme_idx);
+        return Line { fragments };
+    }
+}
+
+impl Display for Line {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #![allow(clippy::implicit_return)]
+        let result: String = self.fragments.iter().map(|f| f.grapheme.as_str()).collect();
+
+        return f.write_str(&result);
     }
 }

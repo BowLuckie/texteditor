@@ -18,6 +18,11 @@ pub enum EditorCommand {
     Resize(Size),
     Quit,
     Insert(char),
+    Del,
+    Backspace,
+    Tab,
+    Enter,
+    Save,
 }
 
 impl TryFrom<&Event> for EditorCommand {
@@ -38,6 +43,20 @@ impl TryFrom<&Event> for EditorCommand {
                     Ok(Self::Insert(*c))
                 }
 
+                KeyCode::Backspace => Ok(Self::Backspace),
+                KeyCode::Delete => Ok(Self::Del),
+
+                KeyCode::Tab => Ok(Self::Tab),
+                KeyCode::Enter => Ok(Self::Enter),
+
+                KeyCode::Char(char @ ('j' | 'k' | 'l' | 'h'))
+                    if modifiers == &KeyModifiers::ALT =>
+                {
+                    Ok(Self::Move(handle_vi_move(*char)))
+                }
+
+                KeyCode::Char('s') if modifiers == &KeyModifiers::CONTROL => Ok(Self::Save),
+
                 KeyCode::Up => Ok(Self::Move(Direction::Up)),
                 KeyCode::Down => Ok(Self::Move(Direction::Down)),
                 KeyCode::Left => Ok(Self::Move(Direction::Left)),
@@ -56,4 +75,15 @@ impl TryFrom<&Event> for EditorCommand {
             _ => return Err(format!("Event not supported: {event:?}")),
         };
     }
+}
+
+fn handle_vi_move(direction: char) -> Direction {
+    assert!(&['h', 'j', 'k', 'l'].contains(&direction));
+    return match direction {
+        'k' => Direction::Up,
+        'j' => Direction::Down,
+        'h' => Direction::Left,
+        'l' => Direction::Right,
+        _ => unreachable!(),
+    };
 }

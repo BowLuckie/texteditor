@@ -4,13 +4,17 @@ use std::{
     io::Error,
     panic::{set_hook, take_hook},
 };
+
 mod editorcommand;
+use editorcommand::EditorCommand;
+
 mod terminal;
-mod view;
 use terminal::Terminal;
+
+mod view;
 use view::View;
 
-use editorcommand::EditorCommand;
+mod statusbar;
 
 pub struct Editor {
     should_quit: bool,
@@ -105,7 +109,7 @@ impl Drop for Editor {
             let _ = Terminal::print(
                 r"
     ___                             ___                                    ___                       
-  ,--.'|_                         ,--.'|_                  ,---,  ,--,   ,--.'|_                     
+  ,--.'|_                         ,--.'|_                  ,---,  ,--,   ,--.'|_          tm         
   |  | :,'                        |  | :,'               ,---.'|,--.'|   |  | :,'   ,---.    __  ,-. 
   :  : ' :            ,--,  ,--,  :  : ' :               |   | :|  |,    :  : ' :  '   ,'\ ,' ,'/ /| 
 .;__,'  /     ,---.   |'. \/ .`|.;__,'  /     ,---.      |   | |`--'_  .;__,'  /  /   /   |'  | |' | 
