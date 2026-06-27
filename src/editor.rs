@@ -18,18 +18,26 @@ pub struct Editor {
 }
 
 impl Editor {
+    /// creates a new [`Editor`].
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if terminal initialization fails.
     pub fn new() -> Result<Self, Error> {
         let current_hook = take_hook();
         set_hook(Box::new(move |panic_info| {
             let _ = Terminal::terminate();
             current_hook(panic_info);
         }));
+
         Terminal::initialize()?;
         let mut view = View::default();
         let args: Vec<String> = env::args().collect();
+
         if let Some(file_name) = args.get(1) {
             view.load(file_name);
         }
+
         return Ok(Self {
             should_quit: false,
             view,
@@ -67,26 +75,16 @@ impl Editor {
         };
 
         if should_process {
-            match EditorCommand::try_from(event) {
-                Ok(command) => {
-                    if matches!(command, EditorCommand::Quit) {
-                        self.should_quit = true;
-                    } else {
-                        self.view.handle_command(command);
-                    }
-                }
-                Err(err) => {
-                    #[cfg(debug_assertions)]
-                    {
-                        panic!("Could not handle command: {err}");
-                    }
+            if let Ok(command) = EditorCommand::try_from(event) {
+                if let EditorCommand::Quit = command {
+                    self.should_quit = true;
+                } else {
+                    self.view.handle_command(command);
                 }
             }
         } else {
             #[cfg(debug_assertions)]
-            {
-                panic!("Received and discarded unsupported or non-press event. {event:?}");
-            }
+            panic!("Received and discarded unsupported or non-press event. {event:?}");
         }
     }
 

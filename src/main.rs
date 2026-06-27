@@ -8,15 +8,13 @@
     clippy::implicit_return
 )]
 #![allow(clippy::needless_return)]
-#![deny(clippy::todo)]
+#![warn(clippy::todo)]
 
 mod editor;
-use core::panic;
 
 use editor::Editor;
 
 fn main() {
-    panic!("");
     let mut editor = Editor::new().unwrap();
     editor.run();
 }

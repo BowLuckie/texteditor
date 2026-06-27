@@ -22,7 +22,7 @@ pub struct View {
     buffer: Buffer,
     needs_redraw: bool,
     size: Size,
-    text_location: Location,
+    caret_location: Location,
     scroll_offset: Position,
 }
 
@@ -44,6 +44,7 @@ impl View {
                 self.scroll();
             }
             EditorCommand::Quit => {}
+            EditorCommand::Insert(c) => self.insert_char(c),
         }
     }
 
@@ -57,6 +58,29 @@ impl View {
     fn resize(&mut self, to: Size) {
         self.size = to;
         self.scroll();
+        self.needs_redraw = true;
+    }
+
+    fn insert_char(&mut self, c: char) {
+        let line_idx = self.caret_location.line_idx;
+        let old_len = self
+            .buffer
+            .lines
+            .get(line_idx)
+            .map_or(0, Line::grapheme_len);
+
+        self.buffer.insert_char(c, self.caret_location);
+
+        let new_len = self
+            .buffer
+            .lines
+            .get(line_idx)
+            .map_or(0, Line::grapheme_len);
+
+        if new_len > old_len {
+            self.move_right();
+        }
+
         self.needs_redraw = true;
     }
 
@@ -137,9 +161,9 @@ impl View {
     }
 
     fn text_location_as_position(&self) -> Position {
-        let row = self.text_location.line_idx;
+        let row = self.caret_location.line_idx;
         let col = self.buffer.lines.get(row).map_or(0, |line| {
-            return line.width_until(self.text_location.grapheme_idx);
+            return line.width_until(self.caret_location.grapheme_idx);
         });
 
         return Position { col, row };
@@ -161,21 +185,21 @@ impl View {
     }
 
     fn move_up(&mut self, step: usize) {
-        self.text_location.line_idx = self.text_location.line_idx.saturating_sub(step);
+        self.caret_location.line_idx = self.caret_location.line_idx.saturating_sub(step);
         self.snap_to_valid_grapheme();
     }
 
     fn move_down(&mut self, step: usize) {
-        self.text_location.line_idx = self.text_location.line_idx.saturating_add(step);
+        self.caret_location.line_idx = self.caret_location.line_idx.saturating_add(step);
         self.snap_to_valid_grapheme();
         self.snape_to_valid_line();
     }
 
     fn move_left(&mut self) {
         #![allow(clippy::arithmetic_side_effects)]
-        if self.text_location.grapheme_idx > 0 {
-            self.text_location.grapheme_idx -= 1;
-        } else if self.text_location.line_idx > 0 {
+        if self.caret_location.grapheme_idx > 0 {
+            self.caret_location.grapheme_idx -= 1;
+        } else if self.caret_location.line_idx > 0 {
             self.move_up(1);
             self.move_to_line_end();
         }
@@ -186,11 +210,11 @@ impl View {
         let line_width = self
             .buffer
             .lines
-            .get(self.text_location.line_idx)
+            .get(self.caret_location.line_idx)
             .map_or(0, Line::grapheme_len);
 
-        if self.text_location.grapheme_idx < line_width {
-            self.text_location.grapheme_idx += 1;
+        if self.caret_location.grapheme_idx < line_width {
+            self.caret_location.grapheme_idx += 1;
         } else {
             self.move_to_line_start();
             self.move_down(1);
@@ -198,29 +222,29 @@ impl View {
     }
 
     fn move_to_line_start(&mut self) {
-        self.text_location.grapheme_idx = 0;
+        self.caret_location.grapheme_idx = 0;
     }
 
     fn move_to_line_end(&mut self) {
-        self.text_location.grapheme_idx = self
+        self.caret_location.grapheme_idx = self
             .buffer
             .lines
-            .get(self.text_location.line_idx)
+            .get(self.caret_location.line_idx)
             .map_or(0, Line::grapheme_len);
     }
 
     fn snap_to_valid_grapheme(&mut self) {
-        self.text_location.grapheme_idx = self
+        self.caret_location.grapheme_idx = self
             .buffer
             .lines
-            .get(self.text_location.line_idx)
+            .get(self.caret_location.line_idx)
             .map_or(0, |line: &line::Line| {
-                return min(line.grapheme_len(), self.text_location.grapheme_idx);
+                return min(line.grapheme_len(), self.caret_location.grapheme_idx);
             });
     }
 
     fn snape_to_valid_line(&mut self) {
-        self.text_location.line_idx = min(self.text_location.line_idx, self.buffer.height());
+        self.caret_location.line_idx = min(self.caret_location.line_idx, self.buffer.height());
     }
 
     fn build_welcome_message(width: usize) -> String {
@@ -248,7 +272,7 @@ impl Default for View {
             buffer: Buffer::default(),
             needs_redraw: true,
             size: Terminal::size().unwrap_or_default(),
-            text_location: Location::default(),
+            caret_location: Location::default(),
             scroll_offset: Position::default(),
         };
     }

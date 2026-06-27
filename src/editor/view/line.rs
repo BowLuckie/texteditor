@@ -31,33 +31,48 @@ struct TextFragment {
 
 impl Line {
     pub fn from(line_str: &str) -> Self {
-        let fragments: Vec<TextFragment> = line_str
-            .graphemes(true)
-            .map(|g| {
-                let width = g.width();
-                let rendered_width = match width {
-                    0 | 1 => GraphemeWidth::Half,
-                    _ => GraphemeWidth::Full,
-                };
-
-                let mut replacement = match width {
-                    0 => Some('.'),
-                    _ => None,
-                };
-
-                if g == "\t" {
-                    replacement = Some('t');
-                }
-
-                return TextFragment {
-                    grapheme: g.into(),
-                    rendered_width,
-                    replacement,
-                };
-            })
-            .collect();
-
+        let fragments = Self::text_to_fragment(line_str);
         return Self { fragments };
+    }
+
+    fn text_to_fragment(line_str: &str) -> Vec<TextFragment> {
+        return line_str
+            .graphemes(true)
+            .map(Self::grapheme_to_fragment)
+            .collect();
+    }
+
+    fn grapheme_to_fragment(g: &str) -> TextFragment {
+        debug_assert_eq!(g.graphemes(true).count(), 1);
+
+        let width = g.width();
+        let rendered_width = match width {
+            0 | 1 => GraphemeWidth::Half,
+            _ => GraphemeWidth::Full,
+        };
+
+        let mut replacement = match width {
+            0 => Some('.'),
+            _ => None,
+        };
+
+        if g == "\t" {
+            replacement = Some(' ');
+        } else if g.trim().is_empty() && g != " " {
+            replacement = Some('␣');
+        } else {
+            g.chars().for_each(|c| {
+                if c.is_control() {
+                    replacement = Some('▯');
+                }
+            });
+        }
+
+        return TextFragment {
+            grapheme: g.into(),
+            rendered_width,
+            replacement,
+        };
     }
 
     pub fn get_visible_graphemes(&self, range: Range<usize>) -> String {
@@ -69,11 +84,6 @@ impl Line {
         let mut current_pos = 0;
         for f in &self.fragments {
             let fragment_end = f.rendered_width.saturating_add(current_pos);
-            eprintln!(
-                "grapheme: {:?}, replacement: {:?}, current_pos: {}, fragment_end: {}, range: {:?}",
-                f.grapheme, f.replacement, current_pos, fragment_end, range
-            );
-
             if current_pos >= range.end {
                 break;
             }
@@ -93,6 +103,23 @@ impl Line {
             current_pos = fragment_end;
         }
         return result;
+    }
+
+    pub fn insert_char(&mut self, ch: char, target_idx: usize) {
+        let mut res = String::new();
+
+        for (idx, frag) in self.fragments.iter().enumerate() {
+            if idx == target_idx {
+                res.push(ch);
+            }
+            res.push_str(&frag.grapheme);
+        }
+
+        if target_idx >= self.fragments.len() {
+            res.push(ch);
+        }
+
+        self.fragments = Self::text_to_fragment(&res);
     }
 
     pub fn grapheme_len(&self) -> usize {
