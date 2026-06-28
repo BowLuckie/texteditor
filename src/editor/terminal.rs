@@ -1,19 +1,20 @@
 use crossterm::cursor::{Hide, MoveTo, Show};
-use crossterm::style::Print;
+use crossterm::style::{Attribute, Print};
 use crossterm::terminal::{
-    Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
-    enable_raw_mode, size,
+    Clear, ClearType, DisableLineWrap, EnableLineWrap, EnterAlternateScreen, LeaveAlternateScreen,
+    SetTitle, disable_raw_mode, enable_raw_mode, size,
 };
 use crossterm::{Command, queue};
+use std::fmt::Display;
 use std::io::{Error, Write, stdout};
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Size {
     pub height: usize,
     pub width: usize,
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct Position {
     pub col: usize,
     pub row: usize,
@@ -39,11 +40,13 @@ impl Terminal {
         Self::leave_alternate_screen()?;
         Self::show_caret()?;
         Self::flush()?;
+        Self::enable_line_wrap()?;
         disable_raw_mode()?;
         return Ok(());
     }
     pub fn initialize() -> TerminalResult {
         enable_raw_mode()?;
+        Self::disable_line_wrap()?;
         Self::enter_alternate_screen()?;
         Self::clear_screen()?;
         Self::flush()?;
@@ -64,6 +67,21 @@ impl Terminal {
     pub fn move_caret_to(position: Position) -> TerminalResult {
         #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
         Self::queue_command(MoveTo(position.col as u16, position.row as u16))?;
+        return Ok(());
+    }
+
+    pub fn set_title<T: Display>(title: T) -> TerminalResult {
+        Self::queue_command(SetTitle(title))?;
+        return Ok(());
+    }
+
+    pub fn disable_line_wrap() -> TerminalResult {
+        Self::queue_command(DisableLineWrap)?;
+        return Ok(());
+    }
+
+    pub fn enable_line_wrap() -> TerminalResult {
+        Self::queue_command(EnableLineWrap)?;
         return Ok(());
     }
 
@@ -89,6 +107,19 @@ impl Terminal {
 
     pub fn print(string: &str) -> TerminalResult {
         Self::queue_command(Print(string))?;
+        return Ok(());
+    }
+
+    pub fn print_row_with_attribute(
+        row: usize,
+        string: &str,
+        attribute: Attribute,
+    ) -> TerminalResult {
+        let width = Self::size()?.width;
+        Self::print_row(
+            row,
+            &format!("{}{:width$.width$}{}", attribute, string, Attribute::Reset),
+        )?;
         return Ok(());
     }
 

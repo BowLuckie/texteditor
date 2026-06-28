@@ -2,6 +2,7 @@ use std::fs::{File, read_to_string};
 use std::io;
 use std::io::Write;
 
+use crate::editor::fileinfo::FileInfo;
 use crate::editor::terminal::TerminalResult;
 use crate::editor::view::Location;
 
@@ -10,7 +11,8 @@ use super::line::Line;
 #[derive(Default)]
 pub struct Buffer {
     pub lines: Vec<Line>,
-    file_name: Option<String>,
+    pub file_info: FileInfo,
+    pub unsaved: bool,
 }
 
 impl Buffer {
@@ -22,17 +24,27 @@ impl Buffer {
         }
         return Ok(Self {
             lines,
-            file_name: Some(file_path.to_string()),
+            file_info: FileInfo::from(file_path),
+            unsaved: false,
         });
     }
 
-    pub fn save(&self) -> TerminalResult {
-        if let Some(fp) = &self.file_name {
-            let mut file = File::create(fp)?;
+    pub fn make_dirty(&mut self) {
+        self.unsaved = true;
+    }
+
+    pub fn clean(&mut self) {
+        self.unsaved = false;
+    }
+
+    pub fn save(&mut self) -> TerminalResult {
+        if let Some(path) = &self.file_info.path {
+            let mut file = File::create(path)?;
             for line in &self.lines {
                 writeln!(file, "{line}")?;
             }
         }
+        self.clean();
         return Ok(());
     }
 
@@ -56,6 +68,7 @@ impl Buffer {
 
         let line = self.lines.get_mut(idx).unwrap();
         line.insert_char(c, caret_location.grapheme_idx);
+        self.make_dirty();
     }
 
     pub fn delete(&mut self, at: Location) {
@@ -72,6 +85,7 @@ impl Buffer {
                 self.lines[at.line_idx].delete_char(at.grapheme_idx);
             }
         }
+        self.make_dirty();
     }
 
     pub fn insert_newline(&mut self, caret_pos: Location) {
@@ -82,5 +96,6 @@ impl Buffer {
         } else {
             self.lines.push(Line::default());
         }
+        self.make_dirty();
     }
 }

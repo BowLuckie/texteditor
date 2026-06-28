@@ -9,16 +9,36 @@ mod editorcommand;
 use editorcommand::EditorCommand;
 
 mod terminal;
+use crate::editor::terminal::Size;
 use terminal::Terminal;
 
 mod view;
 use view::View;
 
-mod statusbar;
+mod documentstatus;
+use documentstatus::DocumentStatus;
 
+mod statusbar;
+use statusbar::StatusBar;
+
+mod fileinfo;
+
+mod uicomponent;
+use uicomponent::UiComponent;
+
+mod messagebar;
+use messagebar::MessageBar;
+
+const NAME: &str = env!("CARGO_PKG_NAME");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[derive(Default)]
 pub struct Editor {
     should_quit: bool,
     view: View,
+    status_bar: StatusBar,
+    terminal_size: Size,
+    title: String,
 }
 
 impl Editor {
@@ -35,17 +55,40 @@ impl Editor {
         }));
 
         Terminal::initialize()?;
-        let mut view = View::default();
-        let args: Vec<String> = env::args().collect();
 
+        let mut editor = Self::default();
+        let size = Terminal::size().unwrap_or_default();
+        editor.resize(size);
+
+        let args: Vec<String> = env::args().collect();
         if let Some(file_name) = args.get(1) {
-            view.load(file_name);
+            editor.view.load(file_name);
         }
 
-        return Ok(Self {
-            should_quit: false,
-            view,
+        editor.refresh_status();
+        return Ok(editor);
+    }
+
+    fn resize(&mut self, size: Size) {
+        self.terminal_size = size;
+        self.view.resize(Size {
+            height: size.height.saturating_sub(2),
+            width: size.width,
         });
+        self.status_bar.resize(Size {
+            height: 1,
+            width: size.width,
+        });
+    }
+
+    pub fn refresh_status(&mut self) {
+        let status = self.view.get_status();
+        let title = format!("{} - {}", status.file_name, NAME);
+        self.status_bar.update_status(status);
+
+        if title != self.title && Terminal::set_title(&title).is_ok() {
+            self.title = title;
+        }
     }
 
     pub fn run(&mut self) {
@@ -63,6 +106,7 @@ impl Editor {
                     }
                 }
             }
+            self.status_bar.update_status(self.view.get_status());
         }
     }
 
@@ -82,19 +126,29 @@ impl Editor {
             if let Ok(command) = EditorCommand::try_from(event) {
                 if let EditorCommand::Quit = command {
                     self.should_quit = true;
+                } else if let EditorCommand::Resize(size) = command {
+                    self.resize(size);
                 } else {
                     self.view.handle_command(command);
                 }
             }
         } else {
             #[cfg(debug_assertions)]
-            panic!("Received and discarded unsupported or non-press event. {event:?}");
+            panic!("received and discarded unsupported or non-press event {event:?}");
         }
     }
 
     fn refresh_screen(&mut self) {
+        if self.terminal_size.height == 0 || self.terminal_size.width == 0 {
+            return;
+        }
+
         let _ = Terminal::hide_caret();
-        self.view.render();
+        self.status_bar
+            .render(self.terminal_size.height.saturating_sub(2));
+        if self.terminal_size.height > 2 {
+            self.view.render(0);
+        }
         let _ = Terminal::move_caret_to(self.view.caret_pos());
         let _ = Terminal::show_caret();
         let _ = Terminal::flush();
