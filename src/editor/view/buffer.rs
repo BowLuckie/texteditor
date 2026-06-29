@@ -3,7 +3,7 @@ use std::io;
 use std::io::Write;
 
 use crate::editor::fileinfo::FileInfo;
-use crate::editor::terminal::TerminalResult;
+use crate::editor::terminal::IoResult;
 use crate::editor::view::Location;
 
 use super::line::Line;
@@ -29,22 +29,22 @@ impl Buffer {
         });
     }
 
-    pub fn make_dirty(&mut self) {
+    pub fn mark_unsaved(&mut self) {
         self.unsaved = true;
     }
 
-    pub fn clean(&mut self) {
+    pub fn mark_saved(&mut self) {
         self.unsaved = false;
     }
 
-    pub fn save(&mut self) -> TerminalResult {
+    pub fn save(&mut self) -> IoResult {
         if let Some(path) = &self.file_info.path {
             let mut file = File::create(path)?;
             for line in &self.lines {
                 writeln!(file, "{line}")?;
             }
+            self.mark_saved();
         }
-        self.clean();
         return Ok(());
     }
 
@@ -68,7 +68,7 @@ impl Buffer {
 
         let line = self.lines.get_mut(idx).unwrap();
         line.insert_char(c, caret_location.grapheme_idx);
-        self.make_dirty();
+        self.mark_unsaved();
     }
 
     pub fn delete(&mut self, at: Location) {
@@ -85,7 +85,7 @@ impl Buffer {
                 self.lines[at.line_idx].delete_char(at.grapheme_idx);
             }
         }
-        self.make_dirty();
+        self.mark_unsaved();
     }
 
     pub fn insert_newline(&mut self, caret_pos: Location) {
@@ -96,6 +96,6 @@ impl Buffer {
         } else {
             self.lines.push(Line::default());
         }
-        self.make_dirty();
+        self.mark_unsaved();
     }
 }

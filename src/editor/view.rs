@@ -1,10 +1,12 @@
 use std::cmp::min;
 
-use crate::editor::{DocumentStatus, NAME, VERSION, uicomponent::UiComponent, view::line::Line};
+use crate::editor::{
+    DocumentStatus, NAME, VERSION, command::Edit, uicomponent::UiComponent, view::line::Line,
+};
 
 use super::{
-    editorcommand::{Direction, EditorCommand},
-    terminal::{Position, Size, Terminal, TerminalResult},
+    command::Move,
+    terminal::{IoResult, Position, Size, Terminal},
 };
 mod buffer;
 use buffer::Buffer;
@@ -43,30 +45,40 @@ impl View {
         };
     }
 
-    pub fn handle_command(&mut self, command: EditorCommand) {
-        match command {
-            EditorCommand::Move(direction) => self.move_text_location(direction),
-            EditorCommand::Insert(c) => self.insert_char(c),
-            EditorCommand::Del => self.delete(),
-            EditorCommand::Backspace => self.backspace(),
-            EditorCommand::Tab => self.insert_char('\t'),
-            EditorCommand::Enter => self.insert_newline(),
-            EditorCommand::Save => self.save(),
-            EditorCommand::Quit | EditorCommand::Resize(_) => {
-                unreachable!()
-            }
+    pub fn handle_edit_command(&mut self, edit: Edit) {
+        match edit {
+            Edit::Insert(ch) => self.insert_char(ch),
+            Edit::NewLine => self.insert_newline(),
+            Edit::Delete => self.delete(),
+            Edit::Backspace => self.backspace(),
         }
     }
 
-    fn save(&mut self) {
-        let _ = self.buffer.save();
+    pub fn has_unsaved_changed(&self) -> bool {
+        return self.get_status().is_modified;
     }
 
-    pub fn load(&mut self, file_name: &str) {
-        if let Ok(buffer) = Buffer::load(file_name) {
-            self.buffer = buffer;
-            self.mark_redraw(true);
-        }
+    pub fn get_file_name(&self) -> String {
+        return self
+            .buffer
+            .file_info
+            .path
+            .as_deref()
+            .and_then(|p| return p.to_str())
+            .unwrap_or("[No Name]")
+            .to_string();
+    }
+
+    pub fn save(&mut self) -> IoResult {
+        return self.buffer.save();
+    }
+
+    pub fn load(&mut self, file_name: &str) -> IoResult {
+        let buffer = Buffer::load(file_name)?;
+        self.buffer = buffer;
+        self.mark_redraw(true);
+
+        return Ok(());
     }
 
     fn insert_char(&mut self, c: char) {
@@ -86,7 +98,7 @@ impl View {
             .map_or(0, Line::grapheme_count);
 
         if new_len > old_len {
-            self.move_text_location(Direction::Right);
+            self.handle_move_command(Move::Right);
         }
 
         self.mark_redraw(true);
@@ -106,19 +118,19 @@ impl View {
         {
             return;
         }
-        self.move_text_location(Direction::Left);
+        self.handle_move_command(Move::Left);
         self.delete();
     }
 
     fn insert_newline(&mut self) {
         self.buffer.insert_newline(self.caret_location);
-        self.move_text_location(Direction::Right);
+        self.handle_move_command(Move::Right);
         self.mark_redraw(true);
     }
 
     // rendering
 
-    fn render_line(at: usize, line_text: &str) -> TerminalResult {
+    fn render_line(at: usize, line_text: &str) -> IoResult {
         return Terminal::print_row(at, line_text);
     }
 
@@ -135,7 +147,7 @@ impl View {
         } else {
             false
         };
-        self.needs_redraw = self.needs_redraw || offset_changed;
+        self.mark_redraw(self.needs_redraw() || offset_changed);
     }
 
     pub fn scroll_horizontally(&mut self, to: usize) {
@@ -149,7 +161,7 @@ impl View {
         } else {
             false
         };
-        self.needs_redraw = self.needs_redraw || offset_changed;
+        self.mark_redraw(self.needs_redraw() || offset_changed);
     }
 
     fn scroll(&mut self) {
@@ -173,18 +185,18 @@ impl View {
         return Position { col, row };
     }
 
-    fn move_text_location(&mut self, direction: Direction) {
+    pub fn handle_move_command(&mut self, direction: Move) {
         let Size { height, .. } = self.size;
 
         match direction {
-            Direction::PageUp => self.move_up(height.saturating_sub(1)),
-            Direction::PageDown => self.move_down(height.saturating_sub(1)),
-            Direction::Home => self.move_to_line_start(),
-            Direction::End => self.move_to_line_end(),
-            Direction::Up => self.move_up(1),
-            Direction::Left => self.move_left(),
-            Direction::Right => self.move_right(),
-            Direction::Down => self.move_down(1),
+            Move::PageUp => self.move_up(height.saturating_sub(1)),
+            Move::PageDown => self.move_down(height.saturating_sub(1)),
+            Move::StartOfLine => self.move_to_line_start(),
+            Move::EndOfLine => self.move_to_line_end(),
+            Move::Up => self.move_up(1),
+            Move::Left => self.move_left(),
+            Move::Right => self.move_right(),
+            Move::Down => self.move_down(1),
         }
         self.scroll();
     }
@@ -294,7 +306,7 @@ impl UiComponent for View {
         self.scroll();
     }
 
-    fn draw(&mut self, origin_y: usize) -> TerminalResult {
+    fn draw(&mut self, origin_y: usize) -> IoResult {
         #![allow(clippy::integer_division)]
         let Size { height, width } = self.size;
         let end_y = origin_y.saturating_add(height);

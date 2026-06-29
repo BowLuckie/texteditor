@@ -2,7 +2,7 @@ use crossterm::style::Attribute;
 
 use crate::editor::{DocumentStatus, terminal::Terminal, uicomponent::UiComponent};
 
-use super::terminal::{Size, TerminalResult};
+use super::terminal::{IoResult, Size};
 
 #[derive(Debug, Default)]
 pub struct StatusBar {
@@ -24,7 +24,7 @@ impl UiComponent for StatusBar {
         self.size = size;
     }
 
-    fn draw(&mut self, origin_y: usize) -> TerminalResult {
+    fn draw(&mut self, origin_y: usize) -> IoResult {
         #![allow(clippy::integer_division)]
         let size = Terminal::size()?;
 

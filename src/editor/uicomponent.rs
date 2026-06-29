@@ -1,4 +1,4 @@
-use crate::editor::terminal::{Size, TerminalResult};
+use crate::editor::terminal::{IoResult, Size};
 
 pub trait UiComponent {
     fn mark_redraw(&mut self, value: bool);
@@ -29,5 +29,5 @@ pub trait UiComponent {
         }
     }
 
-    fn draw(&mut self, origin_y: usize) -> TerminalResult;
+    fn draw(&mut self, origin_y: usize) -> IoResult;
 }
